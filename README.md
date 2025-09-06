@@ -79,8 +79,8 @@ Abrí **PowerShell** y ejecutá (ajustando las rutas si las cambiaste):
 1. Cloná este repo:
 
    ```powershell
-   git clone https://github.com/<tu-usuario>/<tu-repo>.git
-   cd <tu-repo>
+   git clone https://github.com/GuillermoCochrane/YTD-APP.git
+   cd YTD-APP
    ```
 
 2. Instalá las dependencias de Node.js:
@@ -98,7 +98,7 @@ Abrí **PowerShell** y ejecutá (ajustando las rutas si las cambiaste):
 1. Iniciá el servidor:
 
    ```powershell
-   node app.js
+   npm start
    ```
 
 2. Abrí el navegador en:
