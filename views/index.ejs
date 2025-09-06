@@ -13,11 +13,11 @@
         --border-radius: 8px;
       }
       body {
-        background: #f5f7ff;
+        background: #999;
         display: flex;
         justify-content: center;
         align-items: center;
-        min-height: 100vh;
+        min-height: 95vh;
         font-family: sans-serif;
       }
       .container {
@@ -84,6 +84,7 @@
         color: var(--light);
         cursor: pointer;
         margin-bottom: 10px;
+        border: 1px solid var(--primary);
       }
       dialog::backdrop {
         background: rgba(0, 0, 0, 0.6);
@@ -144,8 +145,10 @@
       <div id="step4" class="step">
         <button class="back-button" onclick="goBack(4)">← Volver</button>
         <div class="form-group">
-          <label>Selecciona la calidad:</label>
-          <div id="formatOptions"></div>
+          <label for="formatSelect">Selecciona la calidad:</label>
+          <select id="formatSelect">
+            <option value="">-- Elige un formato --</option>
+          </select>
         </div>
         <button onclick="prepareDownload()">Preparar descarga</button>
       </div>
@@ -232,8 +235,8 @@
 
       function selectFormatType(type) {
         selectedFormatType = type;
-        const container = document.getElementById("formatOptions");
-        container.innerHTML = "";
+        const select = document.getElementById("formatSelect");
+        select.innerHTML = '<option value="">-- Elige un formato --</option>';
 
         const filtered = formats.filter((f) => {
           if (type === "audio")
@@ -243,18 +246,18 @@
         });
 
         filtered.forEach((f) => {
-          const btn = document.createElement("button");
-          btn.textContent = `${f.resolution} - ${f.ext} ${f.note}`;
-          btn.onclick = () => {
-            selectedFormat = f.id;
-          };
-          container.appendChild(btn);
+          const opt = document.createElement("option");
+          opt.value = f.id;
+          opt.textContent = `${f.resolution} - ${f.ext} ${f.note}`;
+          select.appendChild(opt);
         });
 
         showStep(4);
       }
 
       function prepareDownload() {
+        const select = document.getElementById("formatSelect");
+        selectedFormat = select.value;
         if (!selectedFormat) {
           alert("Selecciona un formato");
           return;

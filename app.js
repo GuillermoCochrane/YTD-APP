@@ -1,122 +1,94 @@
 const express = require("express");
 const { spawn } = require("child_process");
 const path = require("path");
-const fs = require("fs");
 
 const app = express();
-app.use(express.urlencoded({ extended: true }));
+const PORT = 3000;
+
+let lastProgress = 0;
+let downloading = false;
+
 app.use(express.json());
 app.use(express.static("public"));
-
 app.set("view engine", "ejs");
-
-const outputDir = path.join(__dirname, "descargas");
-if (!fs.existsSync(outputDir)) {
-  fs.mkdirSync(outputDir, { recursive: true });
-}
 
 // Página principal
 app.get("/", (req, res) => {
   res.render("index");
 });
 
-// Obtener formatos
+// Obtener formatos disponibles
 app.post("/formats", (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: "URL requerida" });
+  const url = req.body.url;
+  if (!url) return res.json({ error: "No se proporcionó URL" });
 
   const ytdlp = spawn("yt-dlp", ["-F", url]);
+
   let output = "";
-
-  ytdlp.stdout.on("data", data => {
-    output += data.toString();
-  });
-
-  ytdlp.stderr.on("data", data => {
-    console.error(`stderr: ${data}`);
-  });
+  ytdlp.stdout.on("data", data => (output += data.toString()));
+  ytdlp.stderr.on("data", data => console.error(data.toString()));
 
   ytdlp.on("close", () => {
-    const lines = output.split("\n").filter(line => /^\d+/.test(line));
-    const formats = lines.map(line => {
-      const parts = line.trim().split(/\s+/);
-      return {
-        id: parts[0],
-        ext: parts[1],
-        resolution: parts[2] || "audio",
-        note: parts.slice(3).join(" ")
-      };
-    });
+    const formats = [];
+    const lines = output.split("\n");
+
+    for (const line of lines) {
+      if (/^\d+/.test(line)) {
+        const parts = line.trim().split(/\s+/);
+        const id = parts[0];
+        const ext = parts[1];
+        const resolution = parts[2];
+        const note = parts.slice(3).join(" ");
+        formats.push({ id, ext, resolution, note });
+      }
+    }
     res.json({ formats });
   });
 });
 
-// Progreso en vivo con SSE
-app.get("/progress", (req, res) => {
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive"
-  });
-
-  const send = (msg) => res.write(`data: ${msg}\n\n`);
-
-  // Guardamos función de envío en request
-  req.app.set("progressStream", send);
-
-  req.on("close", () => {
-    req.app.set("progressStream", null);
-  });
-});
-
-// Descargar
+// Descargar el video/audio
 app.post("/download", (req, res) => {
   const { url, format, type } = req.body;
+  if (!url || !format) return res.json({ error: "Faltan parámetros" });
 
-  if (!url || !format) {
-    return res.status(400).json({ error: "URL y formato requeridos" });
-  }
-
-  let outputPattern = `${outputDir}/%(title)s.%(ext)s`;
-  if (type === "playlist") {
-    outputPattern = `${outputDir}/%(playlist_title)s/%(title)s.%(ext)s`;
-  }
-
-  const args = [
-    "-f", `${format}+bestaudio`,
-    "--merge-output-format", "mp4",
-    "--embed-metadata",
-    "--embed-thumbnail",
-    "-o", outputPattern,
-    url
-  ];
-
+  const output = path.join(__dirname, "descargas", "%(title)s.%(ext)s");
+  const args = ["-f", format, "-o", output, url];
   const ytdlp = spawn("yt-dlp", args);
+
+  downloading = true;
+  lastProgress = 0;
 
   ytdlp.stdout.on("data", data => {
     const line = data.toString();
-    const match = line.match(/\[download\]\s+(\d+\.\d+)%/);
-    if (match) {
-      const percent = parseFloat(match[1]);
-      const stream = req.app.get("progressStream");
-      if (stream) stream(percent);
-    }
-    console.log(line);
+    const match = line.match(/(\d+\.\d)%/);
+    if (match) lastProgress = parseFloat(match[1]);
   });
 
-  ytdlp.stderr.on("data", data => {
-    console.error(`stderr: ${data}`);
+  ytdlp.stderr.on("data", data => console.error(data.toString()));
+
+  ytdlp.on("close", () => {
+    downloading = false;
+    lastProgress = 100;
   });
 
-  ytdlp.on("close", code => {
-    console.log(`yt-dlp terminó con código ${code}`);
-    const stream = req.app.get("progressStream");
-    if (stream) stream("100"); // aseguramos completar
-  });
-
-  res.json({ message: "Descarga iniciada" });
+  res.json({ status: "started" });
 });
 
-app.listen(3000, () => {
-  console.log("Servidor corriendo en http://localhost:3000");
+// Progreso en vivo
+app.get("/progress", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const interval = setInterval(() => {
+    res.write(`data: ${lastProgress}\n\n`);
+    if (!downloading && lastProgress >= 100) {
+      clearInterval(interval);
+      res.end();
+    }
+  }, 1000);
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
