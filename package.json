@@ -4,9 +4,9 @@
   "description": "App de gestión de PAC/observaciónes para Geopatagonia",
   "main": "index.js",
   "scripts": {
-    "start": "node ./app.js",
-    "test": "nodemon ./app.js",
-    "dev": "nodemon ./app.js"
+    "start": "node ./src/app.js",
+    "test": "nodemon ./src/app.js",
+    "dev": "nodemon ./src/app.js"
   },
   "author": "Guillermo Cochrane",
   "license": "ISC",
