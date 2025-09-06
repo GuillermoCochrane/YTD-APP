@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Descargador YouTube</title>
+    <style>
+      :root {
+        --primary: #4361ee;
+        --secondary: #3a0ca3;
+        --light: #f8f9fa;
+        --dark: #212529;
+        --border-radius: 8px;
+      }
+      body {
+        background: #f5f7ff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: sans-serif;
+      }
+      .container {
+        background: #333;
+        color: white;
+        padding: 30px;
+        border-radius: var(--border-radius);
+        width: 100%;
+        max-width: 500px;
+      }
+      h1 {
+        text-align: center;
+        color: var(--primary);
+      }
+      .step {
+        display: none;
+      }
+      .step.active {
+        display: block;
+      }
+      .form-group {
+        margin-bottom: 15px;
+        width: 100%;
+      }
+      input,
+      select,
+      button {
+        width: 100%;
+        padding: 10px;
+        margin-block: 5px;
+        margin-inline: auto;
+        border-radius: var(--border-radius);
+        border: none;
+      }
+      input,
+      select {
+        color: black;
+      }
+      input{
+        width: 95%;
+      }
+      button {
+        background: var(--primary);
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--secondary);
+      }
+      .progress {
+        height: 10px;
+        background: #555;
+        border-radius: 5px;
+        margin-top: 20px;
+      }
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: var(--primary);
+        transition: width 0.2s;
+      }
+      .back-button {
+        background: none;
+        color: var(--light);
+        cursor: pointer;
+        margin-bottom: 10px;
+      }
+      dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .spinner {
+        border: 6px solid #eee;
+        border-top: 6px solid var(--primary);
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+        margin: auto;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Descargador YouTube</h1>
+
+      <!-- Paso 1 -->
+      <div id="step1" class="step active">
+        <div class="form-group">
+          <label>¿Qué deseas descargar?</label>
+          <button onclick="selectType('video')">Un video</button>
+          <button onclick="selectType('playlist')">Una playlist</button>
+        </div>
+      </div>
+
+      <!-- Paso 2 -->
+      <div id="step2" class="step">
+        <button class="back-button" onclick="goBack(2)">← Volver</button>
+        <div class="form-group">
+          <label>Ingresa la URL</label>
+          <input type="text" id="url" placeholder="Pega el enlace aquí" />
+        </div>
+        <button onclick="processUrl()">Continuar</button>
+      </div>
+
+      <!-- Paso 3 -->
+      <div id="step3" class="step">
+        <button class="back-button" onclick="goBack(3)">← Volver</button>
+        <div class="form-group">
+          <label>¿Qué formato deseas?</label>
+          <button onclick="selectFormatType('audio')">Solo audio</button>
+          <button onclick="selectFormatType('video')">Video completo</button>
+        </div>
+      </div>
+
+      <!-- Paso 4 -->
+      <div id="step4" class="step">
+        <button class="back-button" onclick="goBack(4)">← Volver</button>
+        <div class="form-group">
+          <label>Selecciona la calidad:</label>
+          <div id="formatOptions"></div>
+        </div>
+        <button onclick="prepareDownload()">Preparar descarga</button>
+      </div>
+
+      <!-- Paso 5 -->
+      <div id="step5" class="step">
+        <button class="back-button" onclick="goBack(5)">← Volver</button>
+        <div class="form-group">
+          <p>
+            El archivo se guardará en la carpeta <strong>descargas</strong> del
+            proyecto.
+          </p>
+        </div>
+        <button onclick="startDownload()">Iniciar descarga</button>
+        <div class="progress">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <p id="status"></p>
+      </div>
+    </div>
+
+    <!-- Spinner bloqueante -->
+    <dialog id="loadingDialog">
+      <div class="spinner"></div>
+      <p style="text-align: center; color: #333">Cargando formatos...</p>
+    </dialog>
+
+    <script>
+      let currentStep = 1;
+      let selectedType = "";
+      let selectedFormatType = "";
+      let selectedFormat = "";
+      let formats = [];
+      let url = "";
+
+      function showStep(step) {
+        document
+          .querySelectorAll(".step")
+          .forEach((s) => s.classList.remove("active"));
+        document.getElementById(`step${step}`).classList.add("active");
+        currentStep = step;
+      }
+
+      function goBack(step) {
+        showStep(step - 1);
+      }
+
+      function selectType(type) {
+        selectedType = type;
+        showStep(2);
+        document.getElementById("url").focus();
+      }
+
+      function processUrl() {
+        url = document.getElementById("url").value;
+        if (!url) {
+          alert("Por favor ingresa una URL");
+          return;
+        }
+
+        const dlg = document.getElementById("loadingDialog");
+        dlg.showModal();
+
+        fetch("/formats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            dlg.close();
+            if (data.error) {
+              alert("Error: " + data.error);
+              return;
+            }
+            formats = data.formats;
+            showStep(3);
+          })
+          .catch((err) => {
+            dlg.close();
+            alert("Error: " + err);
+          });
+      }
+
+      function selectFormatType(type) {
+        selectedFormatType = type;
+        const container = document.getElementById("formatOptions");
+        container.innerHTML = "";
+
+        const filtered = formats.filter((f) => {
+          if (type === "audio")
+            return f.ext === "m4a" || f.note.includes("audio");
+          else
+            return f.resolution !== "audio" && !f.note.includes("audio only");
+        });
+
+        filtered.forEach((f) => {
+          const btn = document.createElement("button");
+          btn.textContent = `${f.resolution} - ${f.ext} ${f.note}`;
+          btn.onclick = () => {
+            selectedFormat = f.id;
+          };
+          container.appendChild(btn);
+        });
+
+        showStep(4);
+      }
+
+      function prepareDownload() {
+        if (!selectedFormat) {
+          alert("Selecciona un formato");
+          return;
+        }
+        showStep(5);
+      }
+
+      function startDownload() {
+        fetch("/download", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url,
+            format: selectedFormat,
+            type: selectedType,
+          }),
+        })
+          .then((res) => res.json())
+          .then(() => {
+            document.getElementById("status").textContent = "Descargando...";
+            const evtSource = new EventSource("/progress");
+            evtSource.onmessage = function (e) {
+              const percent = parseFloat(e.data);
+              if (!isNaN(percent)) {
+                document.getElementById("progressBar").style.width =
+                  percent + "%";
+                document.getElementById(
+                  "status"
+                ).textContent = `Descargando... ${percent.toFixed(1)}%`;
+              }
+            };
+          });
+      }
+    </script>
+  </body>
+</html>
